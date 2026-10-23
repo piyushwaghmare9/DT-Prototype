@@ -176,12 +176,31 @@ async def login(payload: LoginRequest):
             detail="Database connection error during login. Please try again later.",
         )
 
-    # 2. Verify credentials using bcrypt (passwords are never stored in plaintext)
-    if not user or not verify_password(payload.password, user.get("password_hash", "")):
-        logger.warning(f"[Auth] Login failed: Invalid credentials for email: {email_clean}")
+    # If user not found, check if database was fresh/empty and seed demo data
+    if not user:
+        try:
+            total_users = await db.users.count_documents({})
+            if total_users == 0:
+                from app.core.seeder import seed_demo_data
+                await seed_demo_data(db)
+                user = await db.users.find_one({"email": email_clean})
+        except Exception as e:
+            logger.warning(f"[Auth] Auto-seeding check failed: {e}")
+
+    # 2. Check if user exists
+    if not user:
+        logger.warning(f"[Auth] Login failed: No user found for email: {email_clean}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
+            detail="No account found with this email. Please click 'Join CampusX' to create an account first, or use a demo account.",
+        )
+
+    # 3. Verify credentials using bcrypt
+    if not verify_password(payload.password, user.get("password_hash", "")):
+        logger.warning(f"[Auth] Login failed: Incorrect password for email: {email_clean}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password. Please try again or use the demo credentials.",
         )
 
     # 3. Check account suspension status

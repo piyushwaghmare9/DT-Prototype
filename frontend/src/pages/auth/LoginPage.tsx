@@ -22,9 +22,14 @@ export default function LoginPage() {
   const { addToast } = useUIStore();
   const navigate = useNavigate();
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
+
+  const fillDemo = (email: string) => {
+    setValue('email', email, { shouldValidate: true });
+    setValue('password', 'CampusPass123!', { shouldValidate: true });
+  };
 
   async function onSubmit(data: FormData) {
     setLoading(true);
@@ -117,6 +122,53 @@ export default function LoginPage() {
               {!loading && <ArrowRight size={18} />}
             </button>
           </form>
+
+          {/* Quick Demo Logins */}
+          <div style={{
+            marginTop: '1.25rem',
+            padding: '1rem',
+            borderRadius: '12px',
+            background: 'var(--cx-bg-secondary, #f8fafc)',
+            border: '1px solid var(--cx-border, #e2e8f0)',
+            fontSize: '0.8125rem',
+          }}>
+            <div style={{ fontWeight: 600, color: 'var(--cx-text)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>⚡ Quick Demo Logins</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--cx-text-muted)' }}>Pass: CampusPass123!</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => fillDemo('admin@campus.edu')}
+                style={{
+                  padding: '0.5rem 0.625rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--cx-border, #cbd5e1)',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontWeight: 600, color: 'var(--cx-text)', fontSize: '0.8125rem' }}>👑 Admin</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--cx-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>admin@campus.edu</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemo('arjun.sharma@campus.edu')}
+                style={{
+                  padding: '0.5rem 0.625rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--cx-border, #cbd5e1)',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontWeight: 600, color: 'var(--cx-text)', fontSize: '0.8125rem' }}>🎓 Student</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--cx-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>arjun.sharma@campus.edu</div>
+              </button>
+            </div>
+          </div>
 
           <div className="divider" />
 
