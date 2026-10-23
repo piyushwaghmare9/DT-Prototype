@@ -13,13 +13,30 @@ import bcrypt
 security = HTTPBearer()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def verify_password(plain_password: str, hashed_password) -> bool:
     try:
-        return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8")
-        )
-    except Exception:
+        if not plain_password or not hashed_password:
+            return False
+        if isinstance(plain_password, str):
+            plain_bytes = plain_password.encode("utf-8")[:72]
+        else:
+            plain_bytes = bytes(plain_password)[:72]
+
+        if isinstance(hashed_password, str):
+            hash_bytes = hashed_password.encode("utf-8")
+        elif isinstance(hashed_password, bytes):
+            hash_bytes = hashed_password
+        else:
+            return False
+
+        return bcrypt.checkpw(plain_bytes, hash_bytes)
+    except Exception as e:
+        logger.warning(f"verify_password check failed: {e}")
         return False
 
 
@@ -65,11 +82,46 @@ async def get_current_user(
         raise credentials_exception
 
     user_id: str = payload.get("sub")
-    if user_id is None:
+    email: str = payload.get("email")
+    if not user_id and not email:
         raise credentials_exception
 
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user = None
+
+    # 1. Look up by ObjectId or string ID
+    if user_id:
+        try:
+            if ObjectId.is_valid(user_id):
+                user = await db.users.find_one({"_id": ObjectId(user_id)})
+            elif isinstance(user_id, str):
+                user = await db.users.find_one({"_id": user_id})
+        except Exception:
+            user = None
+
+    # 2. Look up by email (handles ID shifts across container environments)
+    if user is None and email:
+        try:
+            user = await db.users.find_one({"email": email.strip().lower()})
+        except Exception:
+            user = None
+
+    # 3. If missing from in-memory collection (e.g. serverless cold start), restore from persistent cache
+    if user is None:
+        try:
+            from app.core.user_cache import get_cached_user
+            cached = get_cached_user(email or user_id)
+            if cached:
+                doc = dict(cached)
+                if "_id" in doc and ObjectId.is_valid(doc["_id"]):
+                    doc["_id"] = ObjectId(doc["_id"])
+                user_email = doc.get("email", "").strip().lower()
+                if user_email:
+                    await db.users.replace_one({"email": user_email}, doc, upsert=True)
+                    user = await db.users.find_one({"email": user_email})
+        except Exception as ce:
+            logger.warning(f"Error restoring cached user in get_current_user: {ce}")
+
     if user is None:
         raise credentials_exception
 

@@ -28,18 +28,31 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 → redirect to login (only when not already on auth pages)
+// Handle 401 → redirect to login safely without false kickouts
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (
-      err.response?.status === 401 &&
-      !window.location.pathname.startsWith('/login') &&
-      !window.location.pathname.startsWith('/register')
-    ) {
-      localStorage.removeItem('cx_token');
-      localStorage.removeItem('cx_user');
-      window.location.href = '/login';
+    if (err.response?.status === 401) {
+      const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+      const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register');
+      const currentToken = localStorage.getItem('cx_token');
+      const reqAuth = err.config?.headers?.Authorization;
+      const requestToken = typeof reqAuth === 'string' ? reqAuth.replace(/^Bearer\s+/i, '').trim() : null;
+
+      // Check if user authenticated recently (within last 5 seconds) to avoid race conditions during route transition
+      const authTime = parseInt(localStorage.getItem('cx_auth_time') || '0', 10);
+      const isFreshAuth = Date.now() - authTime < 5000;
+
+      // Only force redirect if:
+      // 1. Not already on an auth screen
+      // 2. We actually had an active token that was sent with this request and explicitly rejected
+      // 3. Not within the fresh login transition grace period
+      if (!isAuthPage && currentToken && requestToken && requestToken === currentToken && !isFreshAuth) {
+        localStorage.removeItem('cx_token');
+        localStorage.removeItem('cx_user');
+        localStorage.removeItem('cx_auth_time');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

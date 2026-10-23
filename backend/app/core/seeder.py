@@ -1,8 +1,17 @@
 from datetime import datetime, timezone
+from bson import ObjectId
 from app.core.security import get_password_hash
+from app.core.user_cache import save_user_to_cache
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Deterministic ObjectIds so demo users have consistent IDs across all serverless containers and restarts
+ADMIN_OID = ObjectId("65a000000000000000000001")
+ARJUN_OID = ObjectId("65a000000000000000000002")
+PRIYA_OID = ObjectId("65a000000000000000000003")
+ROHIT_OID = ObjectId("65a000000000000000000004")
+ANANYA_OID = ObjectId("65a000000000000000000005")
 
 async def seed_demo_data(db):
     """Seed comprehensive initial demo students, skills, resources, and projects."""
@@ -16,6 +25,7 @@ async def seed_demo_data(db):
 
     # 1. Admin User
     admin_doc = {
+        "_id": ADMIN_OID,
         "email": "admin@campus.edu",
         "username": "admin",
         "full_name": "Campus Admin",
@@ -43,8 +53,9 @@ async def seed_demo_data(db):
         "created_at": now,
         "updated_at": now,
     }
-    admin_res = await db.users.insert_one(admin_doc)
-    admin_id = str(admin_res.inserted_id)
+    await db.users.replace_one({"email": admin_doc["email"]}, admin_doc, upsert=True)
+    save_user_to_cache(admin_doc)
+    admin_id = str(ADMIN_OID)
 
     # 2. Demo Students
     students_data = [
@@ -178,10 +189,12 @@ async def seed_demo_data(db):
         },
     ]
 
+    student_oids = [ARJUN_OID, PRIYA_OID, ROHIT_OID, ANANYA_OID]
     inserted_users = []
-    for s in students_data:
-        res = await db.users.insert_one(s)
-        s["_id"] = res.inserted_id
+    for idx, s in enumerate(students_data):
+        s["_id"] = student_oids[idx]
+        await db.users.replace_one({"email": s["email"]}, s, upsert=True)
+        save_user_to_cache(s)
         inserted_users.append(s)
 
     u_arjun = inserted_users[0]

@@ -48,6 +48,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setAuth: (user, token) => {
     localStorage.setItem('cx_token', token);
     localStorage.setItem('cx_user', JSON.stringify(user));
+    localStorage.setItem('cx_auth_time', Date.now().toString());
     set({ user, token, isAuthenticated: true });
   },
 
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   logout: () => {
     localStorage.removeItem('cx_token');
     localStorage.removeItem('cx_user');
+    localStorage.removeItem('cx_auth_time');
     set({ user: null, token: null, isAuthenticated: false });
   },
 

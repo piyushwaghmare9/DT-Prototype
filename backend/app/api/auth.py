@@ -138,11 +138,18 @@ async def register(payload: RegisterRequest):
             detail="Database error: Failed to save registration record to MongoDB Atlas.",
         )
 
-    # 6. Generate JWT token
+    # 6. Generate JWT token with sub and email for robust cross-environment identity
     token = create_access_token(
-        {"sub": str(result.inserted_id)},
+        {"sub": str(result.inserted_id), "email": email_clean},
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+
+    # Persist registered user to backup cache so credentials survive restarts/serverless cold starts
+    try:
+        from app.core.user_cache import save_user_to_cache
+        save_user_to_cache(user_doc)
+    except Exception as ce:
+        logger.warning(f"[Auth] Failed to cache user on registration: {ce}")
 
     # 7. Initialize starter quest progress in MongoDB
     try:
@@ -187,6 +194,21 @@ async def login(payload: LoginRequest):
         except Exception as e:
             logger.warning(f"[Auth] Auto-seeding check failed: {e}")
 
+    # If still not found, check persistent backup user cache (restores users in serverless/mock restarts)
+    if not user:
+        try:
+            from app.core.user_cache import get_cached_user
+            cached = get_cached_user(email_clean)
+            if cached:
+                doc = dict(cached)
+                if "_id" in doc and ObjectId.is_valid(doc["_id"]):
+                    doc["_id"] = ObjectId(doc["_id"])
+                await db.users.replace_one({"email": email_clean}, doc, upsert=True)
+                user = await db.users.find_one({"email": email_clean})
+                logger.info(f"[Auth] Restored user from cache during login: {email_clean}")
+        except Exception as ce:
+            logger.warning(f"[Auth] User cache restore failed during login: {ce}")
+
     # 2. Check if user exists
     if not user:
         logger.warning(f"[Auth] Login failed: No user found for email: {email_clean}")
@@ -203,7 +225,7 @@ async def login(payload: LoginRequest):
             detail="Incorrect password. Please try again or use the demo credentials.",
         )
 
-    # 3. Check account suspension status
+    # 4. Check account suspension status
     if user.get("is_suspended", False):
         logger.warning(f"[Auth] Login rejected: Suspended account for email: {email_clean}")
         raise HTTPException(
@@ -211,13 +233,18 @@ async def login(payload: LoginRequest):
             detail="Account is suspended. Contact campus administration.",
         )
 
-    # Note: Login strictly authenticates existing users and NEVER creates a new user document.
     logger.info(f"[Auth] User logged in successfully: User ID: {user['_id']}, Email: {email_clean}")
 
     token = create_access_token(
-        {"sub": str(user["_id"])},
+        {"sub": str(user["_id"]), "email": email_clean},
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+
+    try:
+        from app.core.user_cache import save_user_to_cache
+        save_user_to_cache(user)
+    except Exception:
+        pass
 
     return {"access_token": token, "token_type": "bearer", "user": _safe_user(user)}
 

@@ -105,6 +105,14 @@ async def connect_to_mongo():
                 await seed_demo_data(db)
             except Exception as se:
                 logger.warning(f"Fallback demo seed: {se}")
+
+            # Restore any registered users from persistent cache
+            try:
+                from app.core.user_cache import sync_cached_users_to_db
+                await sync_cached_users_to_db(db)
+            except Exception as ce:
+                logger.warning(f"Fallback cache sync: {ce}")
+
             logger.info(f"[CampusX MongoDB] Resilient in-memory database successfully initialized.")
             return
         except Exception as fallback_err:

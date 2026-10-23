@@ -124,6 +124,8 @@ routers = [
 for r in routers:
     app.include_router(r, prefix="/api/v1")
     app.include_router(r, prefix="/api")
+    app.include_router(r, prefix="/v1")
+    app.include_router(r)
 
 
 
