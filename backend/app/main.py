@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -33,7 +33,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} started")
 
     # Ensure upload directory exists
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    try:
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    except OSError:
+        pass
 
     yield
 
@@ -46,17 +49,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="CampusX — Your Campus. Your Skills. Your Next Big Thing.",
+    description="CampusXchange — Your Campus. Your Skills. Your Next Big Thing.",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
 
-# CORS
+# CORS - allow local dev, Vercel deployments, and production URLs
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.FRONTEND_URL,
+        "https://campusxchange.vercel.app",
+        "https://campusx.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -66,11 +71,22 @@ app.add_middleware(
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def ensure_db_connected(request: Request, call_next):
+    from app.core.database import db_connected, connect_to_mongo
+    if not db_connected:
+        try:
+            await connect_to_mongo()
+        except Exception as e:
+            logger.error(f"Error connecting database on demand: {e}")
+    return await call_next(request)
 
 from app.api import (
     auth,

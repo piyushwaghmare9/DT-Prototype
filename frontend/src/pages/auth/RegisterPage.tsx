@@ -75,7 +75,9 @@ export default function RegisterPage() {
       const detail = err.response?.data?.detail;
       let msg = 'Please try again';
       if (!err.response) {
-        msg = 'Backend server is unreachable. Please ensure the backend is running on port 8000.';
+        msg = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+          ? 'Backend server is unreachable. Please verify your backend API is deployed and VITE_API_BASE_URL is configured.'
+          : 'Backend server is unreachable. Please ensure the backend is running on port 8000.';
       } else if (typeof detail === 'string') {
         msg = detail;
       } else if (Array.isArray(detail)) {

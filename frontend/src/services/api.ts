@@ -1,6 +1,17 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const isLocalhost = Boolean(
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+   window.location.hostname === '127.0.0.1' ||
+   window.location.hostname === '[::1]')
+);
+
+// In local dev default to http://localhost:8000/api/v1.
+// In cloud/Vercel default to configured VITE_API_BASE_URL or relative /api/v1.
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  (isLocalhost ? 'http://localhost:8000/api/v1' : '/api/v1');
 
 export const api = axios.create({
   baseURL: API_BASE,

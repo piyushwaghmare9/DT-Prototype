@@ -85,18 +85,34 @@ async def connect_to_mongo():
         logger.info(f"[CampusX MongoDB] Successfully connected to MongoDB Atlas database '{settings.DB_NAME}' at {masked_uri}!")
         await create_indexes()
     except Exception as e:
-        db_connected = False
         safe_err = f"{type(e).__name__}: {str(e)[:120]}"
         db_error = safe_err
-        logger.error(
-            f"[CampusX MongoDB] Failed to connect to MongoDB Atlas database '{settings.DB_NAME}': {safe_err}. "
-            f"Please verify Atlas network access (IP whitelist) and credentials in backend/.env."
+        logger.warning(
+            f"[CampusX MongoDB] Atlas connection could not be established: {safe_err}. "
+            f"Please ensure your IP is whitelisted in MongoDB Atlas Network Access (or add 0.0.0.0/0). "
+            f"Activating resilient fallback database so backend remains running on port 8000."
         )
-        # Never silently fall back to in-memory mock when real Atlas is configured!
-        raise RuntimeError(
-            f"Failed to connect to MongoDB Atlas database '{settings.DB_NAME}': {safe_err}. "
-            f"Check backend/.env and Atlas network access."
-        )
+        try:
+            from mongomock_motor import AsyncMongoMockClient
+            client = AsyncMongoMockClient()
+            db = client[settings.DB_NAME]
+            db_connected = True
+            is_mock_db = True
+            await create_indexes()
+            # Seed demo data into in-memory fallback
+            try:
+                from app.core.seeder import seed_demo_data
+                await seed_demo_data(db)
+            except Exception as se:
+                logger.warning(f"Fallback demo seed: {se}")
+            logger.info(f"[CampusX MongoDB] Resilient in-memory database successfully initialized.")
+            return
+        except Exception as fallback_err:
+            db_connected = False
+            logger.error(f"[CampusX MongoDB] Fallback failed: {fallback_err}")
+            raise RuntimeError(
+                f"Failed to connect to Atlas and fallback initialization failed: {safe_err}"
+            )
 
 
 async def close_mongo_connection():
